@@ -1,0 +1,5 @@
+{
+  "name": "Image Resizer & Cropper",
+  "description": "An intuitive web application to easily resize and crop your images in bulk. You can resize an image to have its shortest side be 800 pixels while maintaining aspect ratio, or freely crop any section of the image. Upload multiple images to get started.",
+  "requestFramePermissions": []
+}
