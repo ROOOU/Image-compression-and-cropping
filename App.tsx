@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactCrop from 'react-image-crop';
 import type { Crop, PixelCrop, ImageFile } from './types';
 
@@ -182,6 +182,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImagesUpload, setIsProc
 interface ImageEditorProps {
   activeImage: ImageFile | null;
   onUpdateImage: (id: string, dataUrl: string) => void;
+  onRevertImage: (id: string) => void;
   onResetAll: () => void;
   onDownloadAll: () => void;
   isProcessing: boolean;
@@ -189,11 +190,27 @@ interface ImageEditorProps {
   onBatchResize: (minSide: number) => void;
   selectedImageIds: Set<string>;
 }
-const ImageEditor: React.FC<ImageEditorProps> = ({ activeImage, onUpdateImage, onResetAll, onDownloadAll, isProcessing, canDownloadAll, onBatchResize, selectedImageIds }) => {
+const ImageEditor: React.FC<ImageEditorProps> = ({ activeImage, onUpdateImage, onRevertImage, onResetAll, onDownloadAll, isProcessing, canDownloadAll, onBatchResize, selectedImageIds }) => {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [resizeDim, setResizeDim] = useState<number>(800);
+  const [aspect, setAspect] = useState<number | undefined>();
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setAspect(1);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setAspect(undefined);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const handleResizeClick = () => {
     if (resizeDim > 0 && selectedImageIds.size > 0) {
@@ -206,6 +223,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ activeImage, onUpdateImage, o
     const croppedDataUrl = processCrop(imgRef.current!, completedCrop);
     onUpdateImage(activeImage.id, croppedDataUrl);
     setCompletedCrop(undefined);
+    setCrop(undefined);
+  };
+  
+  const handleRevert = () => {
+    if (activeImage) {
+        onRevertImage(activeImage.id);
+    }
   };
 
   const handleDownload = () => {
@@ -217,6 +241,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ activeImage, onUpdateImage, o
   };
   
   const selectedCount = selectedImageIds.size;
+  const imageSrc = activeImage?.processedSrc || activeImage?.originalSrc;
 
   return (
     <div className="w-full flex flex-col lg:flex-row gap-8">
@@ -247,7 +272,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ activeImage, onUpdateImage, o
 
         <div className="flex flex-col gap-2 border border-gray-700 rounded-lg p-3">
             <h3 className="text-md font-semibold text-emerald-300">Crop Active Image</h3>
+            <p className="text-xs text-gray-400 italic">Hold <kbd className="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-300 border border-gray-200 rounded-lg">Shift</kbd> for square crop.</p>
             <Button onClick={handleApplyCrop} Icon={CropIcon} isLoading={isProcessing} className="bg-emerald-600 hover:bg-emerald-700 w-full" disabled={!completedCrop?.width || !activeImage}>Apply Crop</Button>
+            <Button onClick={handleRevert} Icon={ResetIcon} className="bg-yellow-600 hover:bg-yellow-700 w-full" disabled={!activeImage?.processedSrc}>Revert Changes</Button>
         </div>
         
         <div className="border-t border-gray-600 pt-4 flex flex-col gap-2">
@@ -262,26 +289,18 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ activeImage, onUpdateImage, o
 
       <div className="w-full lg:w-2/3 xl:w-3/4 flex-1 flex flex-col gap-6">
         {activeImage ? (
-          <div key={activeImage.id}>
-            <div className="bg-gray-800 p-4 rounded-xl shadow-lg">
-              <h3 className="text-lg font-semibold text-white mb-4 truncate">Editing: {activeImage.name}</h3>
-              <div className="max-h-[60vh] overflow-auto rounded-lg bg-black/30">
-                <ReactCrop crop={crop} onChange={c => setCrop(c)} onComplete={c => setCompletedCrop(c)}>
-                  <img ref={imgRef} src={activeImage.originalSrc} alt="Original to edit" className="w-full h-auto" />
-                </ReactCrop>
-              </div>
+          <div key={activeImage.id} className="bg-gray-800 p-4 rounded-xl shadow-lg">
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-white mb-0 truncate flex-1 pr-4">Editing: {activeImage.name}</h3>
+                {activeImage.processedSrc && (
+                    <Button onClick={handleDownload} Icon={DownloadIcon} className="bg-blue-600 hover:bg-blue-700 flex-shrink-0">Download</Button>
+                )}
+             </div>
+            <div className="max-h-[60vh] overflow-auto rounded-lg bg-black/30">
+              <ReactCrop crop={crop} onChange={c => setCrop(c)} onComplete={c => setCompletedCrop(c)} aspect={aspect}>
+                <img ref={imgRef} src={imageSrc} alt="Image to edit" className="w-full h-auto" />
+              </ReactCrop>
             </div>
-            {activeImage.processedSrc && (
-              <div className="bg-gray-800 p-4 rounded-xl shadow-lg animate-fade-in mt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-white">Processed Image</h3>
-                  <Button onClick={handleDownload} Icon={DownloadIcon} className="bg-blue-600 hover:bg-blue-700">Download</Button>
-                </div>
-                <div className="max-h-[60vh] overflow-auto rounded-lg bg-black/30">
-                  <img src={activeImage.processedSrc} alt="Processed result" className="w-full h-auto" />
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gray-800 p-4 rounded-xl shadow-lg min-h-[300px]">
@@ -389,6 +408,14 @@ export default function App() {
   
   const handleUpdateImage = (id: string, dataUrl: string) => {
     setImages(prev => prev.map(img => img.id === id ? { ...img, processedSrc: dataUrl } : img));
+  };
+
+  const handleRevertImage = (idToRevert: string) => {
+    setImages(prev => 
+        prev.map(img => 
+            img.id === idToRevert ? { ...img, processedSrc: null } : img
+        )
+    );
   };
   
   const handleRemoveImage = (idToRemove: string) => {
@@ -524,6 +551,7 @@ export default function App() {
               <ImageEditor
                 activeImage={activeImage}
                 onUpdateImage={handleUpdateImage}
+                onRevertImage={handleRevertImage}
                 onResetAll={handleResetAll}
                 onDownloadAll={handleDownloadAll}
                 isProcessing={isProcessing}
